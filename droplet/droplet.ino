@@ -1,7 +1,7 @@
 /*
 
   ********************************************************************************
-  Copyright (C) 2014 Isaakidis Marios
+  Copyright (C) 2014 Isaakidis Marios misaakidis@yahoo.gr
 
   This program is free software; you can redistribute it and/or
   modify it under the terms of the GNU General Public License
@@ -79,18 +79,21 @@ void loop() {
 
 
 unsigned long timeInEpoch() {
-  Process time;
-  char epochCharArray[25] = "";
+  Process time;                   // process to run on Linuino
+  char epochCharArray[25] = "";   // char array to be used for atol
 
+  // get UNIX timestamp
   if (!time.running())  {
     time.begin("date");
     time.addParameter("+%s");
     time.run();
   }
   
+  // when execution is completed, store in charArray
   while (time.available() > 0) {
     time.readString().toCharArray(epochCharArray, 25);
   }
   
+  // return long with timestamp
   return atol(epochCharArray);
 }
