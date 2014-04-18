@@ -43,13 +43,14 @@
 #include <Process.h>
 
 
-const int led = 13;         // on-board led of Arduino Yun
-const int hall_input = 12;  // output of the hall effect sensor
+const int led = 13;           // on-board led of Arduino Yun
+const int hall_input = 12;    // output of the hall effect sensor
 
-const int UID = 100;        // Unique Identifier for yun
+const int UID = 100;          // Unique Identifier for yun
 
-int peaks = 0;              // peaks since last transmission
-unsigned long epoch;        // UNIX timestamp when Arduino starts
+int peaks = 0;                // peaks since last transmission
+unsigned long epoch;          // UNIX timestamp when Arduino starts
+unsigned long millisAtEpoch;  // millis at the time of timestamp
 
 void setup() {
   // Initialize Bridge
@@ -64,36 +65,63 @@ void setup() {
   pinMode(hall_input, INPUT);
 
   // Wait for serial to be connected, remove this in the future
-  while (!Serial);
+  while(!Serial);
   
-  // Initialize time from Linino in Unix timestamp format
+  // Wait until connected to the Internet
+  while(!isConnectedToInternet());
+  
+  // Sync clock with NTP
+  setClock();
+  
+  // Get time from Linino in Unix timestamp format
   epoch = timeInEpoch();
 }
 
 void loop() {
   delay(200);
-  // print virtual time
-  Serial.println(epoch + (millis() / 1000));
+  // Print virtual time
+  Serial.println(epoch + ((millis() - millisAtEpoch) / 1000));
 }
 
 
+// Check if connected to the Internet
+int isConnectedToInternet() {
+  Process p;
+  int result;
+  
+  Serial.print("Checking connectivity... ");
 
+  p.runShellCommand("ping -W 1 -c 4 www.google.com >& /dev/null && echo 1 || echo 0");
+  
+  result = p.parseInt();
+  Serial.println(result);
+  return result;
+}
+
+// Synchronize clock using NTP
+void setClock() {
+  Serial.println("Setting clock.");
+  
+  Process p;
+  p.runShellCommand("ntpd -nqp 0.openwrt.pool.ntp.org");
+}
+
+// Return timestamp of Linino
 unsigned long timeInEpoch() {
   Process time;                   // process to run on Linuino
   char epochCharArray[25] = "";   // char array to be used for atol
 
-  // get UNIX timestamp
-  if (!time.running())  {
-    time.begin("date");
-    time.addParameter("+%s");
-    time.run();
-  }
+  // Get UNIX timestamp
+  time.begin("date");
+  time.addParameter("+%s");
+  time.run();
   
-  // when execution is completed, store in charArray
+  // When execution is completed, store in charArray
   while (time.available() > 0) {
+    millisAtEpoch = millis();
     time.readString().toCharArray(epochCharArray, 25);
   }
   
-  // return long with timestamp
+  // Return long with timestamp
   return atol(epochCharArray);
 }
