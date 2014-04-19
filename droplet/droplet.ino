@@ -34,8 +34,12 @@
     * 220 Ohm transistor between Vcc and Output of the sensor
 
   created 17 Apr 2014
-  by Marios Isaakidis
-  team YdroCare
+  by team YdroCare
+    * Adonis Panayides
+	* Marios Isaakidis
+    * Prokopis Constantinou
+    * Stefanos Christoforou
+
   https://misaakidis.github.io/blog/2014/04/water-arduino.html
 
  */
@@ -49,10 +53,14 @@ const int hall_output = 12;    // output of the hall effect sensor
 const int UID = 100;          // Unique Identifier for yun
 const short broadcastInterval = 10; // Interval between broadcasts in seconds
 
+const String curlStart = "curl -X POST -H \"Content-Type: application/json\" -d '";
+const String curlClose = " }' http://ydorcareapi.azurewebsites.net/api/Measures";
+
 int peaks = 0;                // peaks since last transmission
 unsigned long epoch;          // UNIX timestamp when Arduino starts
 unsigned long millisAtEpoch;  // millis at the time of timestamp
-unsigned long lastBroadcast;  // millis at last broadcast
+unsigned long lastBroadcast;     // timestamp at last broadcast
+unsigned long currentBroadcast;  // timestamp at current broadcast
 
 
 /////////////////////////////////////////////////////////////////////
@@ -69,7 +77,7 @@ void setup() {
   pinMode(hall_output, INPUT);
 
   // Wait for serial to be connected, remove this in the future
-  while(!Serial);
+  //while(!Serial);
   
   // Wait until connected to the Internet
   while(!isConnectedToInternet());
@@ -79,21 +87,24 @@ void setup() {
   
   // Get time from Linino in Unix timestamp format
   epoch = timeInEpoch();
-  lastBroadcast = millisAtEpoch;
+  lastBroadcast = epoch;
+  
+  Serial.println("Ready for broadcasting...");
 }
 
 
 /////////////////////////////////////////////////////////////////////
 void loop() {
   waitForPeak();
-  if((millis() - lastBroadcast) > (broadcastInterval * 1000)) {
+  if((calcCurrentTimestamp() - lastBroadcast) > broadcastInterval) {
     broadcastPeaks();
   }
 }
 
 /////////////////////////////////////////////////////////////////////
-void printVirtualTime() {
-  Serial.print(epoch + ((millis() - millisAtEpoch) / 1000));
+// Return current timestamp, calculated by initial Linino's epoch + seconds past since then
+unsigned long calcCurrentTimestamp() {
+  return epoch + ((millis() - millisAtEpoch) / 1000);
 }
 
 
@@ -113,17 +124,22 @@ void waitForPeak() {
 
 
 /////////////////////////////////////////////////////////////////////
+// Asynchronously broadcast peaks in JSON format
 void broadcastPeaks() {
   Process p;
   
-  printVirtualTime();
+  // Set currentBroadcast to current timestamp
+  currentBroadcast = calcCurrentTimestamp();
+  
+  // Print to serial 
+  Serial.print(currentBroadcast);
   Serial.print("\t");
   Serial.print("Broadcasting peaks: ");
   Serial.println(peaks);
   
-  // TODO Replace uname with curl
-  // curl -X POST -H "Content-Type: application/json" -d '{ "UID": UID,  "time_from": lastBroadcast,  "time_to": millis(),  "peaks": peaks }' http://ydorcareapi.azurewebsites.net/api/Measures
-  p.runShellCommandAsynchronously("uname");
+  String curlCmd = String(curlStart + "{ \"UID\": " + UID + ",  \"time_from\": " + lastBroadcast + 
+                          ",  \"time_to\": " + currentBroadcast + ",  \"peaks\": " + peaks + curlClose);
+  p.runShellCommandAsynchronously(curlCmd);
   
   /*  Uncomment for debugging only
       since the above command was run asynchronously
@@ -133,7 +149,8 @@ void broadcastPeaks() {
   }
   */
   
-  lastBroadcast = millis();
+  // Set lastbroadcast timestamp as the current timestamp, reset peaks counter
+  lastBroadcast = currentBroadcast;
   peaks = 0;
 }
 
@@ -146,9 +163,11 @@ int isConnectedToInternet() {
   
   Serial.print("Checking connectivity... ");
 
+  // Check if ping to google.com is successful
   p.runShellCommand("ping -W 1 -c 4 www.google.com >& /dev/null && echo 1 || echo 0");
-  while(p.running());
   
+  // Wait until execution is completed, return result
+  while(p.running()); 
   result = p.parseInt();
   Serial.println(result);
   return result;
@@ -157,11 +176,15 @@ int isConnectedToInternet() {
 
 /////////////////////////////////////////////////////////////////////
 // Synchronize clock using NTP
-void setClock() {
+void setClock() {  
+  Process p;
+  
   Serial.println("Setting clock.");
   
-  Process p;
+  // Sync clock with NTP
   p.runShellCommand("ntpd -nqp 0.openwrt.pool.ntp.org");
+  
+  // Block until clock sync is completed
   while(p.running());
 }
 
