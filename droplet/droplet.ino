@@ -25,7 +25,7 @@
 
   Hardware:
     * Arduino Yun board (connected via Ethernet to the Internet)
-    * Hall Effect Sensor A 42E
+    * NPN Hall Effect Sensor A 42E
 
   The circuit:
     * Vcc of the hall effect sensor to +3.3V
